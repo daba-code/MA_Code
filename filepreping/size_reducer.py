@@ -14,6 +14,11 @@ opt_file_path = os.path.join(folder_path, "optimized_files")
 if not os.path.exists(opt_file_path):
     os.makedirs(opt_file_path)
 
+#user input of parameters for dataframe manipulation
+percentage_of_columns_to_remove = int(input("Enter percentage of columns to be removed:"))
+nth_column_to_remove = int(input("Enter nth column to be removed:"))
+nth_row_to_remove = int(input("Enter nth row to be removed:"))
+
 chunksize = 10
 
 def process_file(file, chunksize, data_chunks):
@@ -29,6 +34,8 @@ def process_file(file, chunksize, data_chunks):
             # Remove empty profiles (rows with all zeros)
             opt_chunk = clear_empty_profiles(chunk)
             row_counter(chunk, opt_chunk)
+            opt_chunk = slice_columns(opt_chunk, percentage_of_columns_to_remove, nth_column_to_remove)
+            opt_chunk = slice_rows(opt_chunk, nth_row_to_remove)
             data_chunks[file].append(opt_chunk)
 
         combined_df = pd.concat(data_chunks[file], ignore_index=True)
