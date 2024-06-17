@@ -6,6 +6,7 @@ from py_helpers import row_counter, clear_empty_profiles, slice_columns, slice_r
 from tqdm import tqdm
 import tkinter as tk
 from tkinter import filedialog
+from concurrent.futures import ProcessPoolExecutor, as_completed
 
 def select_folder():
     root = tk.Tk()
@@ -14,32 +15,25 @@ def select_folder():
     root.destroy()  # Ensure the root tkinter instance is destroyed after selection
     return folder_selected
 
-def process_file(file, chunksize, data_chunks, percentage_of_columns_to_remove, nth_column_to_remove, nth_row_to_remove, opt_file_path):
+def process_file(file, percentage_of_columns_to_remove, nth_column_to_remove, nth_row_to_remove, opt_file_path):
     base_filename = os.path.basename(file)
     new_filename = f"opt_{base_filename}"
     new_filepath = os.path.join(opt_file_path, new_filename)
 
     try: 
-        if file not in data_chunks:
-            data_chunks[file] = []
+        chunk = pd.read_csv(file, delimiter=";", dtype="int16")
+        # Remove empty profiles (rows with all zeros)
+        opt_chunk = clear_empty_profiles(chunk)
+        row_counter(chunk, opt_chunk)
+        opt_chunk = slice_columns(opt_chunk, percentage_of_columns_to_remove, nth_column_to_remove)
+        opt_chunk = slice_rows(opt_chunk, nth_row_to_remove)
 
-        for chunk in pd.read_csv(file, delimiter=";", chunksize=chunksize):
-            # Remove empty profiles (rows with all zeros)
-            opt_chunk = clear_empty_profiles(chunk)
-            row_counter(chunk, opt_chunk)
-            opt_chunk = slice_columns(opt_chunk, percentage_of_columns_to_remove, nth_column_to_remove)
-            opt_chunk = slice_rows(opt_chunk, nth_row_to_remove)
-            data_chunks[file].append(opt_chunk)
-
-        combined_df = pd.concat(data_chunks[file], ignore_index=True)
-        combined_df.to_csv(new_filepath, header=False, index=False, sep=";")
-        print(f"Saved optimized file to: {new_filepath}")
-        #os.startfile(new_filepath)
+        opt_chunk.to_csv(new_filepath, header=False, index=False, sep=";")
+        return f"Saved optimized file to: {new_filepath}"
     except Exception as e:
-        print(f"Error processing file {file}: {e}")
-        
+        return f"Error processing file {file}: {e}"
+
 def main():
-    #data to be modified 
     folder_path = select_folder()  # Prompt user to select folder
 
     if not folder_path:  # Check if the user canceled the selection
@@ -52,22 +46,27 @@ def main():
     if not os.path.exists(opt_file_path):
         os.makedirs(opt_file_path)
 
-    #user input of parameters for dataframe manipulation
-    percentage_of_columns_to_remove = int(input("Enter percentage of columns to be removed:"))
-    nth_column_to_remove = int(input("Enter nth column to be removed:"))
-    nth_row_to_remove = int(input("Enter nth row to be removed:"))
+    # User input of parameters for dataframe manipulation
+    percentage_of_columns_to_remove = int(input("Enter percentage of columns to be removed: "))
+    nth_column_to_remove = int(input("Enter nth column to be removed: "))
+    nth_row_to_remove = int(input("Enter nth row to be removed: "))
 
-    chunksize = 10
+    # Initialize ProcessPoolExecutor for parallel processing
+    with ProcessPoolExecutor() as executor:
+        # Submit tasks to the executor
+        futures = []
+        for file in file_path:
+            future = executor.submit(process_file, file, percentage_of_columns_to_remove, nth_column_to_remove, nth_row_to_remove, opt_file_path)
+            futures.append(future)
+        
+        # Process the results as they complete
+        try:
+            for future in tqdm(as_completed(futures), total=len(futures), desc="Processing files"):
+                result = future.result()
+                print(result)
+        except KeyboardInterrupt:
+            print("Process ended by user")
 
-    data_chunks = {}
-    try:
-        with tqdm(total=len(file_path), desc="processing file") as pbar:
-            for file in file_path:
-                process_file(file, chunksize, data_chunks, percentage_of_columns_to_remove, nth_column_to_remove, nth_row_to_remove, opt_file_path)
-                pbar.update(1)
-    except KeyboardInterrupt:
-        print("process ended by user")
-
-#only execute within this file
+# Only execute within this file
 if __name__ == "__main__":
     main()
