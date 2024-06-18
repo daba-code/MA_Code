@@ -2,18 +2,11 @@ import numpy as np
 import pandas as pd
 import glob
 import os
-from py_helpers import row_counter, clear_empty_profiles, slice_columns, slice_rows
+from py_helpers import row_counter, clear_empty_profiles, slice_columns, slice_rows, select_folder
 from tqdm import tqdm
 import tkinter as tk
 from tkinter import filedialog
 from concurrent.futures import ProcessPoolExecutor, as_completed
-
-def select_folder():
-    root = tk.Tk()
-    root.withdraw()  # Hide the main window
-    folder_selected = filedialog.askdirectory()  # Open the dialog to choose a directory
-    root.destroy()  # Ensure the root tkinter instance is destroyed after selection
-    return folder_selected
 
 def process_file(file, percentage_of_columns_to_remove, nth_column_to_remove, nth_row_to_remove, opt_file_path):
     base_filename = os.path.basename(file)

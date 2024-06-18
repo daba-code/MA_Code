@@ -5,12 +5,22 @@ import pandas as pd
 import time
 
 def is_row_empty(row):
+    #row one-dimensional array: row == 0 "boolsch check if every element in row is 0", np.all contains sum of boolsch check true/ false for whole row
+    #print(f"Checking if row is empty: {row.values}")
     return np.all(row.values == 0)
 
 def clear_empty_profiles(df):
+    #apply is_row_empty for every row in dataframe
+    #is_empty referes to "pandas series": onedimensonal data structure that contains true/ false for every row of data frame
     is_empty = df.apply(is_row_empty, axis=1)
+    #is_empty == False: invert series to get start of relevant data
+    #is_empty[is_empty==False] select only false rows after inverting ergo: select rows until there is no row with no data 
+    #.first_vaild_index(): method to get index of first non-empty row
     first_non_empty = is_empty[is_empty == False].first_valid_index()
+    #same as above, only with last index
     last_non_empty = is_empty[is_empty == False].last_valid_index()
+    #cut data frame down to contain rows with data in it
+    #loc: access certain area of data frame within pandas
     if first_non_empty is None or last_non_empty is None:
         return df.iloc[0:0]  # Return an empty DataFrame if all rows are empty
     return df.loc[first_non_empty:last_non_empty]
