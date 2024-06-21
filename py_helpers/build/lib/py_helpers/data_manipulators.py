@@ -3,6 +3,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
 import time
+import math
 
 def is_row_empty(row):
     #row one-dimensional array: row == 0 "boolsch check if every element in row is 0", np.all contains sum of boolsch check true/ false for whole row
@@ -101,5 +102,27 @@ def slice_rows(df, nth_row_to_remove):
     #apply mask to df
     df_result = df[rows_to_keep]
     return(df_result)
+
+def segmentation(df, num_of_segments):
+    
+    if num_of_segments <= 0:
+        return df()
+    
+    #count no of rows
+    rows_in_df = df.shape[0]
+    #define no of rows in segment, round up to next int with math.ceil
+    segment_size = math.ceil(rows_in_df / num_of_segments)
+    #create segments and return
+    segments=[]
+    for i in range(num_of_segments):
+        start_row = i * segment_size
+        #use min to avoid overexceeding of last segment: min returns smaller value of both
+        end_row = min((i + 1) * segment_size, rows_in_df)
+        #create df for segment
+            #use iloc to access rows and columns based on int-based index 
+        segment_df = df.iloc[start_row:end_row]
+        segments.append(segment_df)
+    
+    return(segments)
 
 
