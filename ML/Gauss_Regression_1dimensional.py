@@ -1,87 +1,96 @@
 import pandas as pd
 import numpy as np
-import GPy
-import glob
 import matplotlib.pyplot as plt
-import os
-from py_helpers import select_folder
+import GPy
+from py_helpers import select_files
+from tqdm import tqdm
+from joblib import Parallel, delayed
+import time
 
-#select directory
-directory = select_folder()
-training_files = glob.glob(os.path.join(directory, "*.csv"))
+def train_gpr(X, y):
+    kernel = GPy.kern.RBF(input_dim=1, variance=1.0, lengthscale=1.0)  # Feste Hyperparameter
+    m = GPy.models.GPRegression(X, y, kernel)
+    return m
 
-#list for input data
-X = [] 
-#list for output data
-Y = []
+def process_profile(df, profile_index):
+    print(f"Processing profile {profile_index}")
+    data_values = df.values[profile_index]
+    x_values = np.arange(len(data_values)).reshape(-1, 1)
+    gpr_model = train_gpr(x_values, data_values.reshape(-1, 1))
+    y_pred, sigma = gpr_model.predict(x_values)
+    return (x_values, data_values, y_pred, sigma)
 
-#read data from each csv file for training
-for file in training_files:
-    try:
-        print(f"reading file {file}")
-        df = pd.read_csv(file, header=None, sep=";", dtype="int16")
+def process_file(file):
+    print(f"Processing file: {file}")
+    df = pd.read_csv(file, header=None, delimiter=";")
+    file_predictions = [process_profile(df, profile_index) for profile_index in range(df.shape[0])]
+    return file, file_predictions
 
-        #df.iterrows() is a generator that yields index and row data for each row in the DataFrame 
-        # -> (index, Series), where i is the row index and profile contains the data of the corresponding index
-        # Iterate over each profile (row) in the DataFrame
-        for i, profile in df.iterrows():
-            # column vector necessary for gaussian process regression
-            # Create a column vector with the profile index for each height value = give each height value of row the index i (1 for first row and so on),
-            # creating a column vector (array with one column), where each element is the profile index 
-            # means for first row, that there is an array with one column where each element is [1]
-                #np.full(shape, fill_value):
-                    #np -> numPy lib
-                    #full array of given shape and type, filled with values
-                    #shape: tuple that defines shape of array in this case ("len(profile)") rows and 1 column
-                    #fill value: in this case "i", which is row index of df
+def main():
+    file_paths = select_files()
+    print(f"Selected files: {file_paths}")
+    input_segments = {}
+    predictions = {}
 
-            profile_index = np.full((len(profile), 1), i, dtype=np.int16)
-            # Extract the height values and reshape them into a column vector to make it compatible with GPR
-                #access underlying data of "profile" series as numpy array -> height values for current profile
-                #.reshape(-1, 1): 
-                    #-1 specific value in numpy, tells automatically to determine the no. of rows based on length of array | 
-                    # 1 specifies that array should have one column 
-            height_values = profile.values.reshape(-1, 1).astype(np.int16)
+    for file in file_paths:
+        input_segments[file] = pd.read_csv(file, header=None, delimiter=";")
 
-            # Print shapes and types for debugging
-            #print(f"Profile index shape: {profile_index.shape}, dtype: {profile_index.dtype}")
-            #print(f"Height values shape: {height_values.shape}, dtype: {height_values.dtype}")
+    total_profiles_per_file = [df.shape[0] for df in input_segments.values()]
+    min_profiles = min(total_profiles_per_file)
+    max_profiles = max(total_profiles_per_file)
 
-            # Append the profile indices to the input data list
-            X.append(profile_index)
-            # Append the height values to the output data list
-            Y.append(height_values)
+    print(f"Total profiles per file: {total_profiles_per_file}")
+    print(f"Smallest number of profiles across all files: {min_profiles}")
+    print(f"Biggest number of profiles across all files: {max_profiles}")
 
-    except Exception as error:
-        print(f"error processing file {file}: {error}")
-    
-# Convert lists to numpy arrays for training: convert list of arrays 
-try:
-    X = np.vstack(X).astype(np.int16)
-    Y = np.vstack(Y).astype(np.int16)
-except Exception as e:
-    print(f"Error converting lists to numpy arrays: {e}")
+    total_steps = sum(total_profiles_per_file)
+    progress_bar = tqdm(total=total_steps, desc="Training Progress", unit="profile")
 
-# Print shapes of the arrays for verification
-print("Shape of X (input data):", X.shape)
-print("Shape of Y (output data):", Y.shape)
+    results = Parallel(n_jobs=-1)(delayed(process_file)(file) for file in file_paths)
 
-# Define and train the Gaussian Process model
-try:
-    kernel = GPy.kern.RBF(input_dim=1, variance=1.0, lengthscale=1.0)
-    model = GPy.models.GPRegression(X, Y, kernel)
-    model.optimize(messages=True)
-except Exception as e:
-    print(f"error during model training: {e}")
+    for file, file_predictions in results:
+        predictions[file] = file_predictions
+        progress_bar.update(len(file_predictions))
 
-# Visualize the trained model
-plt.figure(figsize=(10, 6))
-model.plot()
-plt.xlabel('Profile Index')
-plt.ylabel('Height Values')
-plt.title('Trained Gaussian Process Regression Model')
-plt.show()
+    progress_bar.close()
 
+    print("Plotting results")
+    plt.ion()  # Interactive mode on
+    fig, ax = plt.subplots(figsize=(10, 6))
 
-    
+    for profile_index in range(max_profiles):
+        ax.clear()
+        ax.set_ylim(0, 1000)
+        ax.set_title(f'Profile {profile_index+1}')
+        ax.set_xlabel('Index der Messwerte')
+        ax.set_ylabel('Höhenwerte')
 
+        for file_index, file in enumerate(file_paths):
+            if profile_index < len(predictions[file]):
+                x_values, data_values, y_pred, sigma = predictions[file][profile_index]
+
+                if file_index == 0:
+                    ax.plot(x_values, data_values, 'k.', markersize=10, label='Original data')
+                    ax.plot(x_values, y_pred, 'blue', label='Predicted mean')
+                    ax.fill_between(x_values.flatten(),
+                                    y_pred.flatten() - 1.96 * np.sqrt(sigma.flatten()),  # Konfidenzintervall basierend auf Standardabweichung
+                                    y_pred.flatten() + 1.96 * np.sqrt(sigma.flatten()),
+                                    alpha=0.5, color='red', label='95% confidence interval')
+                else:
+                    ax.plot(x_values, data_values, 'k.', markersize=10)
+                    ax.plot(x_values, y_pred, 'blue')
+                    ax.fill_between(x_values.flatten(),
+                                    y_pred.flatten() - 1.96 * np.sqrt(sigma.flatten()),  # Konfidenzintervall basierend auf Standardabweichung
+                                    y_pred.flatten() + 1.96 * np.sqrt(sigma.flatten()),
+                                    alpha=0.5, color='red')
+
+        ax.legend()
+        plt.draw()
+        plt.pause(2)  # Zeit in Sekunden, um jedes Diagramm anzuzeigen
+
+    plt.ioff()  # Interactive mode off
+    plt.show()
+
+# run main
+if __name__ == "__main__":
+    main()
