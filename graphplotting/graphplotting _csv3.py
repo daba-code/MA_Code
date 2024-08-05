@@ -8,7 +8,7 @@ import os
 from py_helpers import row_counter, clear_empty_profiles
 
 # data to be plotted
-folder_path = r"C:\Users\dabac\Desktop\Seam_left1_1"
+folder_path = r"C:\Users\dabac\Desktop\MA\Seam_left1_1\OK\optimized_files\Gauss_Training_Data\optimized_segmented_files\optimized_segmented_files\optimized_segmented_files\optimized_segmented_files"
 file_path = glob.glob(os.path.join(folder_path, "*.csv"))
 chunksize = 10000
 

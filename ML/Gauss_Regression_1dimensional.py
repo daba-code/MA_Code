@@ -10,7 +10,7 @@ def train_gpr(X, y):
     print(f"Training GPR model with {X.shape[0]} data points")
     kernel = GPy.kern.RBF(input_dim=1, variance=1.0, lengthscale=1.0)  # Fixed hyperparameters
     m = GPy.models.GPRegression(X, y, kernel)
-    #m.optimize(messages=True)  # Optional: Optimize the model hyperparameters
+    m.optimize(messages=True)  # Optional: Optimize the model hyperparameters
     return m
 
 def process_profile_combined(df_list, profile_index):
@@ -77,7 +77,7 @@ def main():
         x_values, data_values, y_pred, sigma = prediction
 
         # Plot original data
-        ax.plot(x_values, data_values, 'k.', markersize=10, label='Original data')
+        ax.plot(x_values, data_values, linestyle='-', marker='.', color='k', markersize=4, linewidth = 2, label='Original data', alpha=0.5)
         # Plot predicted mean
         ax.plot(x_values, y_pred, 'blue', label='Predicted mean')
         # Plot confidence interval
