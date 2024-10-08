@@ -96,7 +96,7 @@ class ProfilePlotter:
         self.ax = self.figure.add_subplot(111, projection='3d')
 
         # Set the range of height values to focus between 150 and 250
-        vmin, vmax = 110, 290
+        vmin, vmax = 250, 450
 
         # Apply PowerNorm with gamma to adjust color scaling
         gamma = 1.2 # Emphasize lower values
@@ -112,7 +112,7 @@ class ProfilePlotter:
         self.ax.set_zlabel('Height', fontsize=12, labelpad=5)  # Increase padding here
 
         # Adjust the view angle for better visualization
-        self.ax.view_init(elev=90, azim=0)
+        self.ax.view_init(elev=90, azim=270)
 
         # Remove the 2D grid (outer bounding box and grid lines)
         self.ax.xaxis.pane.set_visible(False)  # Hide the X-axis pane (background)
@@ -127,7 +127,6 @@ class ProfilePlotter:
         cbar.set_label(f'Height Values(Gamma={gamma})', fontsize=12)
 
         self.canvas.draw()
-
 
 def main():
     root = tk.Tk()
