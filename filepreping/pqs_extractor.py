@@ -2,8 +2,8 @@ import os
 import shutil
 
 # Define the base directory to search and the target directory for copies
-base_dir = r"your\path\to\2022"  # Replace with your actual base directory path
-target_dir = r"your\path\to\target\folder"  # Replace with your target directory path
+base_dir = r"B:\Opel-20241008T111613Z-001\Opel\DataExport_02062022_2_prgNr8_D41Rechts\Data\2022" 
+target_dir = r"B:\dataset"  # Replace with your target directory path
 
 # Make sure the target directory exists
 os.makedirs(target_dir, exist_ok=True)
