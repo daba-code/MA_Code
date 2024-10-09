@@ -2,11 +2,15 @@
 import GPy
 import numpy as np
 import pandas as pd
-from joblib import Parallel, delayed
+from joblib import Parallel, delayed, Memory
 from scipy.stats import norm
 from sklearn.model_selection import KFold
 
+# Set up caching directory
+memory = Memory(location='./cache_dir', verbose=1)
+
 # Function to load a specific row across multiple CSV files
+@memory.cache
 def load_row_data(file_paths, row_index):
     row_data = []
     for file_path in file_paths:
@@ -15,8 +19,29 @@ def load_row_data(file_paths, row_index):
             row_data.append(df.iloc[row_index].values)
     return np.array(row_data)
 
+# Hyperparameter optimization: Grid search for RBF kernel length scale
+@memory.cache
+def optimize_kernel(X_row, y_mean, length_scale_options=[0.1, 0.5, 1, 2, 5]):
+    best_kernel = None
+    best_score = float('inf')  # Initialize with a high score (for minimization)
+
+    for length_scale in length_scale_options:
+        kernel = GPy.kern.RBF(input_dim=X_row.shape[1], lengthscale=length_scale)
+        model = GPy.models.GPRegression(X_row, y_mean, kernel)
+        model.optimize(max_iters=1000)
+
+        # Use model likelihood as a score (higher is better for GPR)
+        score = -model.log_likelihood()
+        
+        if score < best_score:
+            best_score = score
+            best_kernel = kernel
+
+    return best_kernel
+
 # Function to train a GP model on a single row (combined across all training files)
-def train_row_gpr(row_index, file_paths, kernel=None):
+@memory.cache
+def train_row_gpr(row_index, file_paths):
     X_row = load_row_data(file_paths, row_index)
     
     if X_row.size == 0:
@@ -26,11 +51,11 @@ def train_row_gpr(row_index, file_paths, kernel=None):
     mean_height = X_row.mean(axis=0).reshape(-1, 1)
     variance = X_row.var(axis=0).reshape(-1, 1)
     
-    # Train the GP model for this row
-    if kernel is None:
-        kernel = GPy.kern.RBF(input_dim=X_row.shape[1])
+    # Optimize kernel
+    best_kernel = optimize_kernel(X_row, mean_height)
     
-    model = GPy.models.GPRegression(X_row, mean_height, kernel)
+    # Train the GP model with the optimized kernel
+    model = GPy.models.GPRegression(X_row, mean_height, best_kernel)
     model.optimize(max_iters=1000)
     
     return model, mean_height, variance
@@ -55,9 +80,6 @@ def test_row_gpr(row_index, validation_file_paths, model, mean, var):
 all_file_paths = ["path_to_file1.csv", "path_to_file2.csv", ..., "path_to_file30.csv"]
 num_rows = 5000  # Assuming we have 5,000 profiles (rows)
 
-# Kernel for GPR
-kernel = GPy.kern.RBF(input_dim=1)
-
 # Create a KFold object for 6-fold cross-validation
 kf = KFold(n_splits=6)
 
@@ -74,14 +96,12 @@ for fold, (train_index, val_index) in enumerate(kf.split(all_file_paths), 1):
     
     # Train and test each row across files in parallel
     results = Parallel(n_jobs=-1)(
-        delayed(
-            lambda row_idx: (
-                # Train model on training files for this row
-                *train_row_gpr(row_idx, train_files, kernel),
-                # Test this row on validation files
-                test_row_gpr(row_idx, val_files, *train_row_gpr(row_idx, train_files, kernel))
-            )
-        )(row_idx) for row_idx in range(num_rows)
+        delayed(lambda row_idx: (
+            # Train model on training files for this row with optimized kernel
+            *train_row_gpr(row_idx, train_files),
+            # Test this row on validation files
+            test_row_gpr(row_idx, val_files, *train_row_gpr(row_idx, train_files))
+        ))(row_idx) for row_idx in range(num_rows)
     )
     
     # Collect results from this fold
