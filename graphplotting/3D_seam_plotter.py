@@ -112,7 +112,7 @@ class ProfilePlotter:
         self.ax.set_zlabel('Height', fontsize=12, labelpad=5)  # Increase padding here
 
         # Adjust the view angle for better visualization
-        self.ax.view_init(elev=90, azim=270)
+        self.ax.view_init(elev=25, azim=270)
 
         # Remove the 2D grid (outer bounding box and grid lines)
         self.ax.xaxis.pane.set_visible(False)  # Hide the X-axis pane (background)

@@ -33,75 +33,58 @@ def row_counter(original_df, cleaned_df):
     print("There are", no_origin_profiles, "original profiles.")
     print("There are", no_cleaned_profiles, "profiles after cleaning,", removed_profiles, "were removed.")
 
-def slice_columns(df, percentage_of_columns_to_remove, nth_column_to_remove):
-    #count columns
+def slice_columns(df, range_1, range_2, nth_column_to_remove):
+    """
+    Removes two specified ranges of columns and then removes every nth column from the remaining columns.
+
+    Parameters:
+    df (pd.DataFrame): The DataFrame to modify.
+    range_1 (tuple): A tuple indicating the first range of columns to remove (start_1, end_1).
+    range_2 (tuple): A tuple indicating the second range of columns to remove (start_2, end_2).
+    nth_column_to_remove (int): The interval of columns to remove from the remaining columns.
+    
+    Returns:
+    pd.DataFrame: The DataFrame with the specified column ranges removed and every nth column removed.
+    """
+    start_1, end_1 = range_1
+    start_2, end_2 = range_2
+    
+    # Ensure ranges are within valid bounds
     total_columns = df.shape[1]
-    print(f"Total columns: {total_columns}")
-    #no of total columns to be removed in beginning and end of dataframe
-    if percentage_of_columns_to_remove > 0:
-        columns_to_remove = int(total_columns * (percentage_of_columns_to_remove / 100))
-        #print(f"Columns to remove from start and end: {columns_to_remove}")
-        #get no of columns to be removed in beginning and end of df
-        half_columns_to_remove = columns_to_remove // 2
+    start_1 = max(0, start_1)
+    end_1 = min(total_columns, end_1)
+    start_2 = max(0, start_2)
+    end_2 = min(total_columns, end_2)
 
-        if columns_to_remove > 0: 
-            #remove from start
-            start_of_columns_to_keep = df.columns[half_columns_to_remove:total_columns]
-            #remove from end
-            end_of_columns_to_keep = start_of_columns_to_keep[:-half_columns_to_remove]
-            #print(f"Columns after removing from start and end: {end_of_columns_to_keep}")
-        else:
-            end_of_columns_to_keep = df.columns
-        #return df of original df only containing the selected columns
-        remaining_columns = df[end_of_columns_to_keep]
-        #print(f"Remaining columns: {remaining_columns.columns}")
-    else:
-        remaining_columns = df
-
-    if nth_column_to_remove <=0:
-        return remaining_columns
-    #remove every nth column of remaining dataframe
+    # Drop the columns in the specified ranges
+    columns_to_remove = df.columns[start_1:end_1].tolist() + df.columns[start_2:end_2].tolist()
+    print(f"Removing specified column ranges: {columns_to_remove}")
     
-    #mask for storing boolsch values to indicate whether column should be kept or removed 
-    columns_to_keep = []
-    #iterate over the columns of the remaining DataFrame with their index using enumerate
-    for i, column in enumerate(remaining_columns.columns):
-        #create 1-based index
-        column_index = i + 1
-        #check if column_index is not a multiple of nth column
-        if column_index % nth_column_to_remove != 0:
-            #if condition true, then append column name to the columns_to_keep list
-            columns_to_keep.append(column)
-        else:
-            print(f"Removing column: {column} (index: {i})")
+    # DataFrame after removing specified column ranges
+    remaining_df = df.drop(columns=columns_to_remove)
     
-    #apply mask to dataframe
-    #.loc syntax: df.loc[row_indexer, column_indexer]; ":" in the row position refers to select all rows
-    df_result = remaining_columns[columns_to_keep]
-    #print(f"Final columns: {df_result.columns}")
-    return(df_result)
-
-def slice_rows(df, nth_row_to_remove):
-
-    if nth_row_to_remove <= 0:
-        return(df)
+    # If nth_column_to_remove is greater than 0, proceed to remove every nth column
+    if nth_column_to_remove > 0:
+        columns_to_keep = [
+            col for i, col in enumerate(remaining_df.columns)
+            if (i + 1) % nth_column_to_remove != 0
+        ]
+        print(f"Keeping columns after applying nth column rule: {columns_to_keep}")
+        remaining_df = remaining_df[columns_to_keep]
     
-    #count rows
-    total_remaining_rows = df.shape[0]
-    #mask for storing boolsch values to indicate whether row should be kept or removed
-    rows_to_keep = []
-    #iterate over rows with their index using enum
-    for i in range(total_remaining_rows):
-        #create 1-based index
-        row_index = i + 1
-        #check if row_index is not a multiple of nth row
-        if row_index % nth_row_to_remove != 0:
-            rows_to_keep.append(True)
-        else:
-            rows_to_keep.append(False)
-    #apply mask to df
-    df_result = df[rows_to_keep]
-    return(df_result)
+    return remaining_df
+
+
+def slice_rows(df, keep_every_nth_row):
+    """
+    Keeps every nth row instead of removing.
+    """
+    if keep_every_nth_row <= 0:
+        return df
+
+    # Use slicing to keep only every nth row
+    df_result = df.iloc[::keep_every_nth_row]
+    return df_result
 
 def segmentation(df, num_of_segments):
     
