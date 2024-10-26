@@ -194,7 +194,7 @@ def plot_profile(X, Y_true, baseline_pred, Y_gpr_pred, Y_gpr_std, profile_index,
     plt.close()
 
 # Directory where CSV files are located
-file_directory = r'B:\test_files_1dim_v3'  # Replace with your actual path
+file_directory = r'B:\filtered_output\gekuerzt\aligned_files\processed_files\gekuerzt'  # Replace with your actual path
 
 LOWER_THRESHOLD = 200
 UPPER_THRESHOLD = 520

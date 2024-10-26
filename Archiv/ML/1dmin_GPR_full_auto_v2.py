@@ -44,7 +44,7 @@ def load_data(file_directory):
     return all_measurements, min_profiles
 
 # Plotting function for each profile
-def plot_profile(X, Y_true, baseline_pred, Y_gpr_pred, Y_gpr_std, profile_index):
+def plot_profile(X, Y_true, baseline_pred, Y_gpr_pred, Y_gpr_std, profile_index, fold_index, file_directory):
     plt.figure(figsize=(10, 6))
     plt.plot(X, Y_true, label="Actual Values", color="blue")
     plt.plot(X, baseline_pred, label="Baseline Prediction", linestyle="--", color="green")
@@ -55,13 +55,16 @@ def plot_profile(X, Y_true, baseline_pred, Y_gpr_pred, Y_gpr_std, profile_index)
         (Y_gpr_pred.flatten() + 1.96 * Y_gpr_std),
         color="orange", alpha=0.2, label="95% Confidence Interval (GPR)"
     )
-    plt.title(f"Profile {profile_index}: Baseline vs GPR Predictions")
+    plt.title(f"Fold {fold_index + 1} - Profile {profile_index + 1}: Baseline vs GPR Predictions")
     plt.xlabel("Position along Profile")
     plt.ylabel("Height")
     plt.legend()
-    plt.draw()
-    plt.pause(2)   # Display the plot for 2 seconds
-    plt.close()    # Close the plot before moving to the next one
+
+    # Create output folder if it doesn't exist
+    output_folder = os.path.join(file_directory, "plots")
+    os.makedirs(output_folder, exist_ok=True)
+    plt.savefig(os.path.join(output_folder, f"Fold_{fold_index+1}_Profile_{profile_index+1}.png"))
+    plt.close()  # Close the plot to save memory
 
 # Directory where CSV files are located
 file_directory = r'B:\dataset_slicing\optimized_files\optimized_files'  # Replace with your actual path
@@ -92,7 +95,7 @@ mean_residuals_gpr_all_profiles = []
 mean_residuals_baseline_all_profiles = []
 
 # Function to process each profile with GPR
-def process_profile_gpr(profile_index, train_data, val_data):
+def process_profile_gpr(profile_index, train_data, val_data, fold_index, file_directory):
     # Initialize metrics storage for GPR and baseline
     profile_rmse_gpr, profile_r2_gpr, profile_mae_gpr = [], [], []
     profile_rmse_baseline, profile_r2_baseline, profile_mae_baseline = [], [], []
@@ -193,6 +196,11 @@ def process_profile_gpr(profile_index, train_data, val_data):
         if np.isnan(baseline_valid).all():
             profile_excluded_from_baseline_validation = True
             continue
+        
+        # Plot profiles for indices between 90 and 100
+        if PLOT_PROFILES and (90 <= profile_index < 100):
+            plot_profile(X, val_profile, baseline_profile, full_Y_pred, full_Y_std, profile_index, fold_index, file_directory)
+
 
         # Calculate GPR metrics for this validation file
         rmse_gpr, mae_gpr, r2_gpr = calculate_metrics(val_profile_valid, pred_valid)
@@ -254,7 +262,7 @@ for fold_index, (train_indices, val_indices) in enumerate(kf.split(all_measureme
 
     # Run GPR profile processing in parallel for this fold
     results_gpr = Parallel(n_jobs=-1)(
-        delayed(process_profile_gpr)(i, train_data, val_data) for i in tqdm(range(min_profiles), desc=f"Processing Profiles for Fold {fold_index+1}")
+        delayed(process_profile_gpr)(i, train_data, val_data, fold_index) for i in tqdm(range(min_profiles), desc=f"Processing Profiles for Fold {fold_index+1}")
     )
 
     # Collect results for each profile and save to JSON format
