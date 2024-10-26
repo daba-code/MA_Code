@@ -96,14 +96,14 @@ class ProfilePlotter:
         self.ax = self.figure.add_subplot(111, projection='3d')
 
         # Set the range of height values to focus between 150 and 250
-        vmin, vmax = 250, 450
+        vmin, vmax = 100, 200
 
         # Apply PowerNorm with gamma to adjust color scaling
         gamma = 1.2 # Emphasize lower values
         norm = PowerNorm(gamma=gamma, vmin=vmin, vmax=vmax)
 
         # Plot the surface with the non-linear color mapping (PowerNorm)
-        surface = self.ax.plot_surface(X, Y, Z, cmap='plasma_r', edgecolor='none', norm=norm)
+        surface = self.ax.plot_surface(X, Y, Z, cmap='plasma', edgecolor='none', norm=norm)
 
         # Set labels and title with increased label padding
         self.ax.set_title(f'3D Weld Seam Geometry', fontsize=14)
