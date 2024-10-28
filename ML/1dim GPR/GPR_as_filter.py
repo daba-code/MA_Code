@@ -4,9 +4,8 @@ import glob
 import GPy
 import os
 import json
-import matplotlib.pyplot as plt
 from tqdm import tqdm
-from collections import deque
+from joblib import Parallel, delayed
 
 # Funktion zum Laden der Daten in der gewünschten Reihe aus allen Dateien
 def load_file(file_path):
@@ -23,11 +22,11 @@ def gpr_smooth_row(x_positions, row_data, model):
 
     model.set_XY(X_train, y_train)
     y_pred, _ = model.predict(x_positions.reshape(-1, 1))
-    return np.round(y_pred.flatten()).astype(int)
+    return np.round(y_pred.flatten()).astype(int)  # Konvertiert zu int
 
 # Funktion zur Berechnung des y-Shift
 def apply_y_shift(gpr_profile):
-    middle_value = np.nanmean(gpr_profile[300:351])
+    middle_value = np.nanmean(gpr_profile[330:345])
     if np.isnan(middle_value):
         return None
     return gpr_profile - middle_value + 200
@@ -49,18 +48,6 @@ def calculate_reference_weld_position(gpr_profiles, window_size=100):
     mean_profile = np.nanmean(gpr_profiles, axis=0)
     return mean_profile, find_weld_seam_area(mean_profile, window_size)
 
-# Funktion zum Plotten des Mittelwertprofils mit Nahtbereich
-def plot_mean_profile_with_seam(mean_profile, seam_position, window_size=100):
-    plt.figure(figsize=(12, 6))
-    plt.plot(mean_profile, label='Mittelwertprofil')
-    plt.axvspan(seam_position - window_size // 2, seam_position + window_size // 2, 
-                color='orange', alpha=0.3, label='Erkannter Nahtbereich')
-    plt.xlabel('x-Wert (Position)')
-    plt.ylabel('Mittelwert Höhe')
-    plt.title('Mittelwertprofil mit Nahtbereich')
-    plt.legend()
-    plt.show()
-
 # Funktion zur Anwendung des x-Shift basierend auf dem allgemeinen Nahtbereich und Speichern der Shifts
 def apply_x_shift(adjusted_profile, seam_position, reference_position, row_index, shift_info, max_shift=40):
     drift_range = range(reference_position - max_shift, reference_position + max_shift + 1)
@@ -72,7 +59,7 @@ def apply_x_shift(adjusted_profile, seam_position, reference_position, row_index
     return np.roll(adjusted_profile, x_shift)
 
 # Funktion zur Verarbeitung und Speicherung des GPR-Predicted-Datensatzes mit Shifts
-def process_file(file_path, output_directory, shift_info_path):
+def process_file(file_path, output_directory, shift_info_path=None):
     df = load_file(file_path)
     x_positions = np.arange(df.shape[1])
 
@@ -88,33 +75,40 @@ def process_file(file_path, output_directory, shift_info_path):
     # Schritt 1: GPR-Predictions und Berechnung des allgemeinen Nahtbereichs
     gpr_smoothed_profiles = []
     for index, row in df.iterrows():
-        if row.isna().sum() > len(row) / 3:
+        if row.isna().sum() > len(row) / 4:
             continue
         gpr_profile = gpr_smooth_row(x_positions, row.values, model)
         if gpr_profile is not None:
-            adjusted_profile = apply_y_shift(gpr_profile)
-            gpr_smoothed_profiles.append(adjusted_profile)
+            gpr_smoothed_profiles.append(gpr_profile)
 
-    # Berechne das allgemeine Nahtbeginn im Mittelwertprofil und plotte
+    # Berechne das allgemeine Nahtbeginn im Mittelwertprofil
     gpr_smoothed_profiles = np.array(gpr_smoothed_profiles)
     mean_profile, reference_position = calculate_reference_weld_position(gpr_smoothed_profiles)
-    plot_mean_profile_with_seam(mean_profile, reference_position)
 
     # Dictionary zur Speicherung der Verschiebungen pro Reihe
     shift_info = {}
 
     # Schritt 2: Wende den x-Shift basierend auf der Referenzposition an und speichere die Shift-Informationen
-    aligned_profiles = []
+    x_aligned_profiles = []
     for row_index, adjusted_profile in enumerate(gpr_smoothed_profiles):
         if np.isnan(adjusted_profile).all():
-            aligned_profiles.append(adjusted_profile)
+            x_aligned_profiles.append(adjusted_profile)
         else:
             seam_pos = find_weld_seam_area(adjusted_profile)
-            aligned_profile = apply_x_shift(adjusted_profile, seam_pos, reference_position, row_index, shift_info)
-            aligned_profiles.append(aligned_profile)
+            x_aligned_profile = apply_x_shift(adjusted_profile, seam_pos, reference_position, row_index, shift_info)
+            x_aligned_profiles.append(x_aligned_profile)
 
-    # Ergebnisse in einem DataFrame speichern
-    aligned_df = pd.DataFrame(aligned_profiles)
+    # Schritt 3: Wende den y-Shift an
+    y_aligned_profiles = []
+    for adjusted_profile in x_aligned_profiles:
+        if np.isnan(adjusted_profile).all():
+            y_aligned_profiles.append(adjusted_profile)
+        else:
+            y_aligned_profile = apply_y_shift(adjusted_profile)
+            y_aligned_profiles.append(y_aligned_profile)
+
+    # Entferne die ersten und letzten 10 Reihen, konvertiere zu int und speichere
+    aligned_df = pd.DataFrame(y_aligned_profiles[40:-50]).astype(int)
     output_path = os.path.join(output_directory, os.path.basename(file_path).replace(".csv", "_gpr_aligned.csv"))
     aligned_df.to_csv(output_path, sep=";", index=False, header=False)
     print(f"GPR Predictions mit Shifts gespeichert: {output_path}")
@@ -131,8 +125,9 @@ def process_all_files(file_directory):
     os.makedirs(output_directory, exist_ok=True)
 
     file_paths = glob.glob(f"{file_directory}/*.csv")
-    for file_path in file_paths:
-        process_file(file_path, output_directory, shift_info_path=None)
+
+    # Parallele Verarbeitung der Dateien mit joblib
+    Parallel(n_jobs=-1)(delayed(process_file)(file_path, output_directory) for file_path in tqdm(file_paths))
 
 # Beispielanwendung
 file_directory = r"B:\filtered_output_NaN_TH"

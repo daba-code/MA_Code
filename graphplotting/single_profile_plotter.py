@@ -20,10 +20,6 @@ class ProfilePlotter:
         # GUI setup
         self.create_widgets()
         
-        # Bind arrow keys to the root window
-        self.root.bind("<Left>", self.previous_profile_event)
-        self.root.bind("<Right>", self.next_profile_event)
-
         # Faster navigation variables
         self.fast_scroll = False
         self.scroll_delay = 100  # Initial delay in milliseconds
@@ -62,35 +58,36 @@ class ProfilePlotter:
 
     def create_widgets(self):
         """
-        Creates widgets for the GUI including navigation buttons and a plot canvas.
+        Creates widgets for the GUI including navigation buttons, plot canvas, and row entry.
         """
         # Canvas for plotting
         self.figure, self.ax = plt.subplots(figsize=(10, 6))
         self.canvas = FigureCanvasTkAgg(self.figure, master=self.root)
         self.canvas.get_tk_widget().pack(side=tk.TOP, fill=tk.BOTH, expand=True)
 
+        # Row selection
+        self.row_entry_frame = tk.Frame(self.root)
+        self.row_entry_frame.pack(side=tk.TOP, fill=tk.X)
+
+        self.row_label = tk.Label(self.row_entry_frame, text="Enter Row Number:")
+        self.row_label.pack(side=tk.LEFT, padx=5)
+
+        self.row_entry = tk.Entry(self.row_entry_frame, width=5)
+        self.row_entry.pack(side=tk.LEFT, padx=5)
+
+        self.row_button = tk.Button(self.row_entry_frame, text="Plot Row", command=self.plot_specific_row)
+        self.row_button.pack(side=tk.LEFT, padx=5)
+
         # Navigation buttons
         self.button_frame = tk.Frame(self.root)
         self.button_frame.pack(side=tk.BOTTOM, fill=tk.X)
-
-        self.prev_button = tk.Button(self.button_frame, text="Previous Profile", command=self.previous_profile)
-        self.prev_button.pack(side=tk.LEFT, padx=5, pady=5)
-
-        self.next_button = tk.Button(self.button_frame, text="Next Profile", command=self.next_profile)
-        self.next_button.pack(side=tk.RIGHT, padx=5, pady=5)
-
-        # Bind mouse button hold for fast scrolling
-        self.prev_button.bind("<ButtonPress-1>", lambda event: self.start_fast_scroll(-1))
-        self.next_button.bind("<ButtonPress-1>", lambda event: self.start_fast_scroll(1))
-        self.prev_button.bind("<ButtonRelease-1>", self.stop_fast_scroll)
-        self.next_button.bind("<ButtonRelease-1>", self.stop_fast_scroll)
 
         # Initial plot
         self.plot_profile()
 
     def plot_profile(self):
         """
-        Plots the current profile from the current file.
+        Plots the current profile from the current file with auto-scaled y-axis.
         """
         df = self.dataframes[self.current_file_index]
         file_path = self.file_paths[self.current_file_index]
@@ -107,96 +104,38 @@ class ProfilePlotter:
         data_values = df.iloc[self.current_profile_index].values
         x_values = np.arange(len(data_values))
         color = "green"
-        # Plot
-        self.ax.clear()
-        self.ax.plot(x_values, data_values, color = color, linewidth = 4, label=f'Profile {self.current_profile_index + 1}')
-        self.ax.set_ylim(0, 800)
-        self.ax.set_title(f'Profile {self.current_profile_index + 1} from {file_path}', fontsize=0)
-        self.ax.set_xlabel('column', fontsize=40)
-        self.ax.set_ylabel('height values', fontsize=40)
         
-         # Customize tick label font sizes
-        self.ax.tick_params(axis='x', labelsize=30)  # X-axis tick font size
-        self.ax.tick_params(axis='y', labelsize=30)  # Y-axis tick font size
+        # Plot with automatic y-axis scaling
+        self.ax.clear()
+        self.ax.plot(x_values, data_values, color=color, linewidth=4, label=f'Profile {self.current_profile_index + 1}')
+        self.ax.relim()  # Recalculate limits based on the data
+        self.ax.autoscale(enable=True, axis='y')  # Enable auto-scaling on y-axis
+
+        self.ax.set_title(f'Profile {self.current_profile_index + 1} from {file_path}', fontsize=20)
+        self.ax.set_xlabel('Column', fontsize=20)
+        self.ax.set_ylabel('Height Values', fontsize=20)
+
+        # Customize tick label font sizes
+        self.ax.tick_params(axis='x', labelsize=15)  # X-axis tick font size
+        self.ax.tick_params(axis='y', labelsize=15)  # Y-axis tick font size
 
         self.ax.legend()
         self.canvas.draw()
 
-    def next_profile(self):
+    def plot_specific_row(self):
         """
-        Moves to the next profile and updates the plot.
+        Plots the profile from the specific row number entered by the user.
         """
-        df = self.dataframes[self.current_file_index]
-        if df.empty:
-            return
-        
-        self.current_profile_index += 1
-        if self.current_profile_index >= df.shape[0]:
-            self.current_profile_index = 0
-            self.current_file_index = (self.current_file_index + 1) % len(self.dataframes)
-
-        self.plot_profile()
-
-    def previous_profile(self):
-        """
-        Moves to the previous profile and updates the plot.
-        """
-        df = self.dataframes[self.current_file_index]
-        if df.empty:
-            return
-        
-        self.current_profile_index -= 1
-        if self.current_profile_index < 0:
-            self.current_file_index = (self.current_file_index - 1) % len(self.dataframes)
+        try:
+            row_index = int(self.row_entry.get()) - 1
             df = self.dataframes[self.current_file_index]
-            self.current_profile_index = df.shape[0] - 1
-
-        self.plot_profile()
-
-    def next_profile_event(self, event):
-        """
-        Event handler for moving to the next profile using the right arrow key.
-        """
-        self.start_fast_scroll(1)
-        self.root.after(self.scroll_delay, self.stop_fast_scroll)
-
-    def previous_profile_event(self, event):
-        """
-        Event handler for moving to the previous profile using the left arrow key.
-        """
-        self.start_fast_scroll(-1)
-        self.root.after(self.scroll_delay, self.stop_fast_scroll)
-
-    def start_fast_scroll(self, direction):
-        """
-        Starts the fast scrolling process in a given direction.
-
-        Parameters:
-        - direction: int, direction of scrolling (+1 for next, -1 for previous).
-        """
-        if not self.fast_scroll:
-            self.fast_scroll = True
-            self.fast_scroll_loop(direction)
-
-    def stop_fast_scroll(self, event=None):
-        """
-        Stops the fast scrolling process.
-        """
-        self.fast_scroll = False
-
-    def fast_scroll_loop(self, direction):
-        """
-        Handles the fast scrolling loop by repeatedly changing profiles.
-
-        Parameters:
-        - direction: int, direction of scrolling (+1 for next, -1 for previous).
-        """
-        if self.fast_scroll:
-            if direction > 0:
-                self.next_profile()
+            if 0 <= row_index < df.shape[0]:
+                self.current_profile_index = row_index
+                self.plot_profile()
             else:
-                self.previous_profile()
-            self.root.after(self.scroll_delay, lambda: self.fast_scroll_loop(direction))
+                print(f"Row number out of range. Please enter a number between 1 and {df.shape[0]}")
+        except ValueError:
+            print("Invalid row number. Please enter a valid integer.")
 
 def main():
     root = tk.Tk()

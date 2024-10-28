@@ -16,6 +16,7 @@ class ProfilePlotter:
         # File selection
         self.file_paths = self.select_files()
         self.dataframes = [self.load_and_clean_file(file) for file in self.file_paths]
+        self.current_profile_index = 0  # Start with the first profile
 
         # GUI setup
         self.create_widgets()
@@ -54,27 +55,36 @@ class ProfilePlotter:
 
     def create_widgets(self):
         """
-        Creates widgets for the GUI including the plot canvas.
+        Creates widgets for the GUI including the plot canvas and navigation buttons.
         """
         # Canvas for plotting
         self.figure, self.ax = plt.subplots(figsize=(10, 6))
         self.canvas = FigureCanvasTkAgg(self.figure, master=self.root)
         self.canvas.get_tk_widget().pack(side=tk.TOP, fill=tk.BOTH, expand=True)
 
-        # Plot the entire weld seam
-        self.plot_heatmap()
+        # Button frame for navigation
+        self.button_frame = tk.Frame(self.root)
+        self.button_frame.pack(side=tk.BOTTOM, fill=tk.X)
 
-    def plot_heatmap(self):
+        # Navigation buttons
+        self.prev_button = tk.Button(self.button_frame, text="Previous Profile", command=self.previous_profile)
+        self.prev_button.pack(side=tk.LEFT, padx=5, pady=5)
+
+        self.next_button = tk.Button(self.button_frame, text="Next Profile", command=self.next_profile)
+        self.next_button.pack(side=tk.RIGHT, padx=5, pady=5)
+
+        # Initial plot of the first profile
+        self.plot_heatmap(self.current_profile_index)
+
+    def plot_heatmap(self, profile_index):
         """
-        Plots the entire 3D geometry of the weld seam as a 3D surface plot,
-        focusing on the height range between 150 and 250 using PowerNorm with gamma.
+        Plots the 3D geometry of the weld seam for a specific profile.
         """
         if not self.dataframes:
             return
 
-        # Assuming we are loading and visualizing only the first file for simplicity
-        df = self.dataframes[0]
-        file_path = self.file_paths[0]
+        df = self.dataframes[profile_index]
+        file_path = self.file_paths[profile_index]
 
         if df.empty:
             self.ax.clear()
@@ -82,51 +92,54 @@ class ProfilePlotter:
             self.canvas.draw()
             return
 
-        # Convert DataFrame to 2D numpy array for plotting
         seam_data = df.values
-
-        # Prepare grid for 3D plotting
-        x = np.arange(seam_data.shape[1])  # Positions along the weld seam (columns)
-        y = np.arange(seam_data.shape[0])  # Profile slices (rows)
+        x = np.arange(seam_data.shape[1])
+        y = np.arange(seam_data.shape[0])
         X, Y = np.meshgrid(x, y)
-        Z = seam_data  # Height values
+        Z = seam_data
 
-        # Clear the current axes and set up 3D plot
+        # Clear current axes and set up a new 3D plot
         self.ax.clear()
         self.ax = self.figure.add_subplot(111, projection='3d')
 
-        # Set the range of height values to focus between 150 and 250
-        vmin, vmax = 100, 200
-
-        # Apply PowerNorm with gamma to adjust color scaling
-        gamma = 1.2 # Emphasize lower values
+        # Dynamically adjust color normalization based on the min and max values in the profile
+        vmin, vmax = Z.min(), Z.max()
+        gamma = 1  # Adjust gamma as needed
         norm = PowerNorm(gamma=gamma, vmin=vmin, vmax=vmax)
 
-        # Plot the surface with the non-linear color mapping (PowerNorm)
-        surface = self.ax.plot_surface(X, Y, Z, cmap='plasma', edgecolor='none', norm=norm)
+        # Plot the surface with adjusted color mapping
+        surface = self.ax.plot_surface(X, Y, Z, cmap='nipy_spectral', edgecolor='none', norm=norm)
 
-        # Set labels and title with increased label padding
-        self.ax.set_title(f'3D Weld Seam Geometry', fontsize=14)
-        self.ax.set_xlabel('Pixel Number', fontsize=12, labelpad=20)  # Increase padding here
-        self.ax.set_ylabel('Profile Number (cross-section)', fontsize=12, labelpad=20)  # Increase padding here
-        self.ax.set_zlabel('Height', fontsize=12, labelpad=5)  # Increase padding here
+        # Set labels and title with increased padding
+        self.ax.set_title(f'3D Weld Seam Geometry - File {profile_index + 1}', fontsize=14)
+        self.ax.set_xlabel('Pixel Number', fontsize=12, labelpad=20)
+        self.ax.set_ylabel('Profile Number (cross-section)', fontsize=12, labelpad=20)
+        self.ax.set_zlabel('Height', fontsize=12, labelpad=5)
 
-        # Adjust the view angle for better visualization
+        # Adjust the view angle
         self.ax.view_init(elev=25, azim=270)
 
-        # Remove the 2D grid (outer bounding box and grid lines)
-        self.ax.xaxis.pane.set_visible(False)  # Hide the X-axis pane (background)
-        self.ax.yaxis.pane.set_visible(False)  # Hide the Y-axis pane (background)
-        self.ax.zaxis.pane.set_visible(False)  # Hide the Z-axis pane (background)
-
-        # Remove gridlines along the axes
+        # Remove the background grid and panes
+        self.ax.xaxis.pane.set_visible(False)
+        self.ax.yaxis.pane.set_visible(False)
+        self.ax.zaxis.pane.set_visible(False)
         self.ax.grid(False)
 
         # Add color bar for height values
         cbar = self.figure.colorbar(surface, ax=self.ax, shrink=0.5, aspect=5)
-        cbar.set_label(f'Height Values(Gamma={gamma})', fontsize=12)
+        cbar.set_label(f'Height Values (Gamma={gamma})', fontsize=12)
 
         self.canvas.draw()
+
+    def next_profile(self):
+        """Moves to the next profile and updates the plot."""
+        self.current_profile_index = (self.current_profile_index + 1) % len(self.dataframes)
+        self.plot_heatmap(self.current_profile_index)
+
+    def previous_profile(self):
+        """Moves to the previous profile and updates the plot."""
+        self.current_profile_index = (self.current_profile_index - 1) % len(self.dataframes)
+        self.plot_heatmap(self.current_profile_index)
 
 def main():
     root = tk.Tk()
