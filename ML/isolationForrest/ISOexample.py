@@ -1,33 +1,44 @@
 import numpy as np
-import matplotlib.pyplot as plt
+import pandas as pd
 from sklearn.ensemble import IsolationForest
+import matplotlib.pyplot as plt
 
-# Beispiel: U-förmiges Profil für Trainingsdaten
-x_train = np.linspace(0, 10, 100).reshape(-1, 1)  # x-Werte: Positionen entlang der Schweißnaht
-y_train = 70 - (x_train - 5)**2 + np.random.normal(0, 2, x_train.shape)  # U-förmiges Profil mit Rauschen
+# Generate a manageable 3D dataset
+np.random.seed(42)
+x = np.tile(np.arange(1, 201), 50)  # x-values: 200 positions, repeated for 50 profiles
+z = np.repeat(np.arange(1, 51), 200)  # z-values: 50 profiles
+y = 5 + np.random.normal(0, 0.2, len(x))  # Normal values with slight noise
 
-# Beispiel: Testdaten mit einer Anomalie
-x_test = np.linspace(0, 10, 100).reshape(-1, 1)  # Gleiche x-Werte wie im Training
-y_test = 70 - (x_test - 5)**2 + np.random.normal(0, 2, x_test.shape)
-y_test[80] = 90  # Künstliche Anomalie (z.B. an einem Rand)
+# Add anomalies: A block of elevated y-values
+anomaly_indices = np.where((x >= 50) & (x <= 55) & (z >= 10) & (z <= 15))
+y[anomaly_indices] += 2  # Artificial anomalies (elevated height values)
 
-# Isolation Forest zur Anomalieerkennung
-clf = IsolationForest(contamination=0.05, random_state=42)
-clf.fit(y_train)  # Training auf den y-Werten des U-Profils
+# Create a DataFrame
+data = pd.DataFrame({'x': x, 'z': z, 'y': y})
 
-# Vorhersage für Testdaten: -1 bedeutet Anomalie, 1 bedeutet normal
-y_pred = clf.predict(y_test)
+# Train an Isolation Forest
+iso_forest = IsolationForest(n_estimators=100, contamination=0.02, random_state=42)
+data['anomaly_score'] = iso_forest.fit_predict(data[['x', 'z', 'y']])
+data['is_anomaly'] = data['anomaly_score'] == -1  # -1 indicates anomalies
 
-# Visualisierung der Ergebnisse
-plt.figure(figsize=(10, 6))
-plt.plot(x_train, y_train, label='Trainingsdaten (U-förmiges Profil)', color='blue')
-plt.plot(x_test, y_test, label='Testdaten (mit Anomalie)', color='orange')
-plt.scatter(x_test[y_pred == -1], y_test[y_pred == -1], color='red', label='Anomalie', s=100)
-plt.axhline(np.mean(y_train), color='gray', linestyle='--', label='Durchschnitt')
-plt.title('Anomalieerkennung bei U-förmigem Schweißnahtprofil')
-plt.xlabel('Position entlang der Schweißnaht (x-Wert)')
-plt.ylabel('Höhe der Schweißnaht (y-Wert)')
-plt.legend()
+# Visualization: Show anomalies across x and z
+fig = plt.figure(figsize=(12, 8))
+ax = fig.add_subplot(111, projection='3d')
+
+# Scatterplot for normal data
+normal_data = data[~data['is_anomaly']]
+ax.scatter(normal_data['x'], normal_data['z'], normal_data['y'], c='blue', label='Normal', alpha=0.7)
+
+# Scatterplot for anomalies
+anomaly_data = data[data['is_anomaly']]
+ax.scatter(anomaly_data['x'], anomaly_data['z'], anomaly_data['y'], c='red', label='Anomalies', s=40, zorder=5)
+
+# Axis labeling and title
+ax.set_title('Isolation Forest: Anomalies in a 3D Data Structure', fontsize=14)
+ax.set_xlabel('Position (x)', fontsize=12)
+ax.set_ylabel('Profile (z)', fontsize=12)
+ax.set_zlabel('Height (y)', fontsize=12)
+
+# Legend and display
+ax.legend()
 plt.show()
-
-print("Vorhersagen:", y_pred)  # Ausgabe: 1 = normal, -1 = Anomalie
